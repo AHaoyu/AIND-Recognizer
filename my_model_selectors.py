@@ -76,8 +76,23 @@ class SelectorBIC(ModelSelector):
         """
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        def BIC_calculate(logL, num_param, size_data):
+            bicValue = -2 * logL + num_param * np.log(size_data)
+            return bicValue
+
+        for num_s in range(self.min_n_components, self.max_n_components - 1):
+            currentModel = self.base_model(num_s)
+            # calculate the maxmium likelihood estimate which implies the fitting
+            # level between the object model and data.
+            logL = currentModel.score(self.X, self.lengths)
+            # get the size of the observation data set and number of features
+            size_data, num_feature = self.X.shape
+            # calculate the number of free parameters in this model
+            num_param = num_s ** 2 + 2 * num_s * num_feature - 1
+            # calculate the bic
+            bicValue = BIC_calculate(logL, num_param, size_data)
+
+
 
 
 class SelectorDIC(ModelSelector):
