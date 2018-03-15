@@ -22,4 +22,18 @@ def recognize(models: dict, test_set: SinglesData):
     guesses = []
     # TODO implement the recognizer
     # return probabilities, guesses
-    raise NotImplementedError
+
+    all_Xlengths = test_set.get_all_Xlengths()
+    for key in all_Xlengths:
+        this_X, this_lengths = all_Xlengths[key]
+        logL_distribution = {}
+        for key in models:
+            try:
+                logL_distribution[key] = models[key].score(this_X, this_lengths)
+            except:
+                logL_distribution[key] = float("-inf")
+                continue
+        probabilities.append(logL_distribution)
+        this_guess = sorted(logL_distribution,key=lambda x:logL_distribution[x])[-1]
+        guesses.append(this_guess)
+    return probabilities, guesses

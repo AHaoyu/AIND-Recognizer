@@ -82,21 +82,24 @@ class SelectorBIC(ModelSelector):
             return bicValue
         bestBic = float("inf")
         bestModel = 0
-        for num_s in range(self.min_n_components, self.max_n_components - 1):
-            currentModel = self.base_model(num_s)
-            # calculate the maxmium likelihood estimate which implies the fitting
-            # level between the object model and data.
-            logL = currentModel.score(self.X, self.lengths)
-            # get the size of the observation data set and number of features
-            size_data, num_feature = self.X.shape
-            # calculate the number of free parameters in this model
-            num_param = num_s ** 2 + 2 * num_s * num_feature - 1
-            # calculate the bic
-            bicValue = BIC_calculate(logL, num_param, size_data)
-            if bicValue < bestBic:
-                bestBic = bicValue
-                bestModel = currentModel
-            else:
+        for num_s in range(self.min_n_components, self.max_n_components + 1):
+            try:
+                currentModel = self.base_model(num_s)
+                # calculate the maxmium likelihood estimate which implies the fitting
+                # level between the object model and data.
+                logL = currentModel.score(self.X, self.lengths)
+                # get the size of the observation data set and number of features
+                size_data, num_feature = self.X.shape
+                # calculate the number of free parameters in this model
+                num_param = num_s ** 2 + 2 * num_s * num_feature - 1
+                # calculate the bic
+                bicValue = BIC_calculate(logL, num_param, size_data)
+                if bicValue < bestBic:
+                    bestBic = bicValue
+                    bestModel = currentModel
+                else:
+                    continue
+            except:
                 continue
         return bestModel
 
@@ -132,15 +135,18 @@ class SelectorDIC(ModelSelector):
         
         bestDic = float("-inf")
         bestModel = 0
-        for num_s in range(self.min_n_components, self.max_n_components - 1):
-            currentModel = self.base_model(num_s)
-            logL = currentModel.score(self.X, self.lengths)
-            antiLogL_average = antiLogL_calculate(currentModel)
-            dicValue = DIC_calculate(logL, antiLogL_average)
-            if dicValue > bestDic:
-                bestDic = dicValue
-                bestModel = currentModel
-            else:
+        for num_s in range(self.min_n_components, self.max_n_components + 1):
+            try:
+                currentModel = self.base_model(num_s)
+                logL = currentModel.score(self.X, self.lengths)
+                antiLogL_average = antiLogL_calculate(currentModel)
+                dicValue = DIC_calculate(logL, antiLogL_average)
+                if dicValue > bestDic:
+                    bestDic = dicValue
+                    bestModel = currentModel
+                else:
+                    continue
+            except:
                 continue
         return bestModel
             
@@ -159,18 +165,28 @@ class SelectorCV(ModelSelector):
         bestModel = 0
         X_base = self.X
         lengths_base = self.lengths
-        for num_s in range(self.min_n_components, self.max_n_components - 1):
-            logL_sum = 0
+        for num_s in range(self.min_n_components, self.max_n_components + 1):
+            logL_list = []
             for cv_train_idx, cv_test_idx in new_sequences:
                 self.X, self.lengths = combine_sequences(cv_train_idx, new_sequences)
                 X_test, lengths_test = combine_sequences(cv_test_idx, new_sequences)
-                currentModel = self.base_model(num_s)
-                logL_sum += currentModel.score(X_test, lengths_test)
+                try:
+                    currentModel = self.base_model(num_s)
+                    logL_list.append(currentModel.score(X_test, lengths_test))
+                except:
+                    continue
             self.X = X_base
             self.lengths = lengths_base
-            if logL_sum > bestCv:
-                bestCv = logL_sum
-                bestModel = self.base_model(num_s)
+            if bool(len(logL_list)):
+                logL_avg = sum(logL_list)/len(logL_list)
+                if logL_avg > bestCv:
+                    bestCv = logL_avg
+                    try:
+                        bestModel = self.base_model(num_s)
+                    except:
+                        continue  
+                else:
+                    continue
             else:
                 continue
         return bestModel                
