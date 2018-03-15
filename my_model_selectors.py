@@ -92,6 +92,7 @@ class SelectorBIC(ModelSelector):
                 size_data, num_feature = self.X.shape
                 # calculate the number of free parameters in this model
                 num_param = num_s ** 2 + 2 * num_s * num_feature - 1
+                # num_param = 2 * num_s + 2 * num_s * num_feature - 2
                 # calculate the bic
                 bicValue = BIC_calculate(logL, num_param, size_data)
                 if bicValue < bestBic:
@@ -118,7 +119,7 @@ class SelectorDIC(ModelSelector):
 
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
-        
+
         def antiLogL_calculate(model):
             M = len(self.all_word_Xlengths)
             antiLogL_sum = 0
@@ -129,10 +130,10 @@ class SelectorDIC(ModelSelector):
                     X, lengths = self.all_word_Xlengths[key]
                     antiLogL_sum += model.score(X, lengths)
             return antiLogL_sum/(M-1)
-            
+
         def DIC_calculate(logL, antiLogL_average):
             return logL - antiLogL_average
-        
+
         bestDic = float("-inf")
         bestModel = 0
         for num_s in range(self.min_n_components, self.max_n_components + 1):
@@ -149,7 +150,7 @@ class SelectorDIC(ModelSelector):
             except:
                 continue
         return bestModel
-            
+
 
 
 class SelectorCV(ModelSelector):
@@ -160,23 +161,31 @@ class SelectorCV(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        new_sequences = KFold(self.sequences)
         bestCv = float("-inf")
         bestModel = 0
         X_base = self.X
         lengths_base = self.lengths
         for num_s in range(self.min_n_components, self.max_n_components + 1):
             logL_list = []
-            for cv_train_idx, cv_test_idx in new_sequences:
-                self.X, self.lengths = combine_sequences(cv_train_idx, new_sequences)
-                X_test, lengths_test = combine_sequences(cv_test_idx, new_sequences)
+            if len(self.lengths) > 2:
+                # kf = KFold(n_splits = 3, shuffle = False, random_state = None)
+                new_sequences = KFold().split(self.sequences)
+                for cv_train_idx, cv_test_idx in new_sequences:
+                    self.X, self.lengths = combine_sequences(cv_train_idx, self.sequences)
+                    X_test, lengths_test = combine_sequences(cv_test_idx, self.sequences)
+                    try:
+                        currentModel = self.base_model(num_s)
+                        logL_list.append(currentModel.score(X_test, lengths_test))
+                        self.X = X_base
+                        self.lengths = lengths_base
+                    except:
+                        continue
+            else:
                 try:
                     currentModel = self.base_model(num_s)
-                    logL_list.append(currentModel.score(X_test, lengths_test))
+                    logL_list.append(currentModel.score(self.X, self.lengths))
                 except:
                     continue
-            self.X = X_base
-            self.lengths = lengths_base
             if bool(len(logL_list)):
                 logL_avg = sum(logL_list)/len(logL_list)
                 if logL_avg > bestCv:
@@ -184,10 +193,9 @@ class SelectorCV(ModelSelector):
                     try:
                         bestModel = self.base_model(num_s)
                     except:
-                        continue  
+                        continue
                 else:
                     continue
             else:
                 continue
-        return bestModel                
-            
+        return bestModel
