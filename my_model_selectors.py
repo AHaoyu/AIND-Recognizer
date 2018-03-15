@@ -19,6 +19,7 @@ class ModelSelector(object):
                  random_state=14, verbose=False):
         self.words = all_word_sequences
         self.hwords = all_word_Xlengths
+        self.all_word_Xlengths = all_word_Xlengths
         self.sequences = all_word_sequences[this_word]
         self.X, self.lengths = all_word_Xlengths[this_word]
         self.this_word = this_word
@@ -79,7 +80,8 @@ class SelectorBIC(ModelSelector):
         def BIC_calculate(logL, num_param, size_data):
             bicValue = -2 * logL + num_param * np.log(size_data)
             return bicValue
-
+        bestBic = float("inf")
+        bestModel = 0
         for num_s in range(self.min_n_components, self.max_n_components - 1):
             currentModel = self.base_model(num_s)
             # calculate the maxmium likelihood estimate which implies the fitting
@@ -91,6 +93,12 @@ class SelectorBIC(ModelSelector):
             num_param = num_s ** 2 + 2 * num_s * num_feature - 1
             # calculate the bic
             bicValue = BIC_calculate(logL, num_param, size_data)
+            if bicValue < bestBic:
+                bestBic = bicValue
+                bestModel = currentModel
+            else:
+                continue
+        return bestModel
 
 
 
@@ -107,9 +115,35 @@ class SelectorDIC(ModelSelector):
 
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
-
-        # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        
+        def antiLogL_calculate(model):
+            M = len(self.all_word_Xlengths)
+            antiLogL_sum = 0
+            for key in self.all_word_Xlengths:
+                if key == self.this_word:
+                    continue
+                else:
+                    X, lengths = self.all_word_Xlengths[key]
+                    antiLogL_sum += model.score(X, lengths)
+            return antiLogL_sum/(M-1)
+            
+        def DIC_calculate(logL, antiLogL_average):
+            return logL - antiLogL_average
+        
+        bestDic = float("-inf")
+        bestModel = 0
+        for num_s in range(self.min_n_components, self.max_n_components - 1):
+            currentModel = self.base_model(num_s)
+            logL = currentModel.score(self.X, self.lengths)
+            antiLogL_average = antiLogL_calculate(currentModel)
+            dicValue = DIC_calculate(logL, antiLogL_average)
+            if dicValue > bestDic:
+                bestDic = dicValue
+                bestModel = currentModel
+            else:
+                continue
+        return bestModel
+            
 
 
 class SelectorCV(ModelSelector):
@@ -120,5 +154,24 @@ class SelectorCV(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection using CV
-        raise NotImplementedError
+        new_sequences = KFold(self.sequences)
+        bestCv = float("-inf")
+        bestModel = 0
+        X_base = self.X
+        lengths_base = self.lengths
+        for num_s in range(self.min_n_components, self.max_n_components - 1):
+            logL_sum = 0
+            for cv_train_idx, cv_test_idx in new_sequences:
+                self.X, self.lengths = combine_sequences(cv_train_idx, new_sequences)
+                X_test, lengths_test = combine_sequences(cv_test_idx, new_sequences)
+                currentModel = self.base_model(num_s)
+                logL_sum += currentModel.score(X_test, lengths_test)
+            self.X = X_base
+            self.lengths = lengths_base
+            if logL_sum > bestCv:
+                bestCv = logL_sum
+                bestModel = self.base_model(num_s)
+            else:
+                continue
+        return bestModel                
+            
